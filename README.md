@@ -1,4 +1,4 @@
-# Project 7: kidnapped Vehicle Project
+# Project 8: Kidnapped Vehicle Project
 
 ## 1. Introduction
 In this project I implemented a 2 dimensional particle filter in C++.
