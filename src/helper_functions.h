@@ -47,25 +47,32 @@ struct LandmarkObs {
 	double x;			// Local (vehicle coordinates) x position of landmark observation [m]
 	double y;			// Local (vehicle coordinates) y position of landmark observation [m]
 
-	//Kd-Search optimization
+};
+
+struct LandmarkObs_kd {
+
+	int id;				// Id of matching landmark in the map.
 	double dim[2];
 
-	LandmarkObs(){
+	LandmarkObs_kd(){
 		id     = -1;
 		dim[0] = 0.0;
 		dim[1] = 0.0;
 	}
 
-	LandmarkObs(int id_, double x_, double y_) {
+	LandmarkObs_kd(int id_, double x_, double y_) {
 		id = id_;
 		dim[0] = x_;
 		dim[1] = y_;
 	}
 
-	double distance_to(LandmarkObs const& other) const {
-		//return distance(dim[0], dim[1], other.dim[0], other.dim[1]);
-		return sqrt ( (other.dim[0]- dim[0])*(other.dim[0]- dim[0])
-		             +(other.dim[1]- dim[1])*(other.dim[1]- dim[1]));
+	double distance_to(LandmarkObs_kd const& other) const {
+
+		double dist = 0;
+		for (int i = 0; i != 2; ++i)
+			 dist += (dim[i]- other.dim[i])*(dim[i] - other.dim[i]);
+		return std::sqrt(dist);
+
 	}
 
 	inline double operator[](size_t const N) const { return dim[N]; }
@@ -75,7 +82,7 @@ struct LandmarkObs {
 struct tac {
 	// you need this for the KD-tree
 	typedef double result_type;
-	double operator()( LandmarkObs const& t, size_t k ) const { return t[k]; }
+	double operator()( LandmarkObs_kd const& t, size_t k ) const { return t[k]; }
 
 };
 

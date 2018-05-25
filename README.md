@@ -1,4 +1,4 @@
-# Project 7: kidnapped Vehicle Project
+# Project 8: Kidnapped Vehicle Project
 
 ## 1. Introduction
 In this project I implemented a 2 dimensional particle filter in C++.
@@ -11,8 +11,14 @@ Input:
 ```
 Output: vehicle's localization information (`x`,`y`,`yaw`)
 
+**NOTE**: This project was done with **1000** particles by using kdtree++ to opimize nearest neighbors search.
+
 ## 2. Results & Discussion
-to be updated!
+
+<p align="center">
+  <img src="kidnapped-vehicle.png" />
+</p>
+<p align="center">1000 particles<p align="center">
 
 ## 3. Set up environment
 

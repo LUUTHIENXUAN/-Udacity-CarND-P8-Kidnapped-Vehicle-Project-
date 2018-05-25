@@ -14,7 +14,7 @@
 #include <sstream>
 #include <string>
 #include <iterator>
-//#include "libkdtree/kdtree++/kdtree.hpp"
+#include "libkdtree/kdtree++/kdtree.hpp"
 #include "particle_filter.h"
 
 using namespace std;
@@ -29,7 +29,8 @@ using namespace std;
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
 
 	///* Set the number of particles
-	num_particles = 500;
+	num_particles = 1000;
+	optimize = true;
 
 	///* Use a non deterministic seed
 	random_device rd;
@@ -69,18 +70,6 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 			weights[i]           = 1;
 
 	    }
-
-	    /*
-	    ///**DEBUG**
-	    cout << "Particle Initialization Debug: "<<endl;
-	    cout << " Standard deviations for x, y, and theta:"
-			     << std_x << "; " << std_y << "; " << std_theta << endl;
-			for (unsigned int i = 0; i < num_particles; ++i) {
-			     cout << " Particles element:"
-			          << particles[i].id << "; " <<particles[i].x << "; " << particles[i].y <<  "; "
-			          << particles[i].theta << "; " <<particles[i].weight << endl;
-		  }
-		  */
 
 		// done initializing
 		is_initialized = true;
@@ -131,17 +120,6 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
 
 	}
 
-	/*
-	///**DEBUG**
-	cout << "Prediction Debug: " <<endl;
-  for (auto & p : particles) {
-
-		cout << " Particles element:"
-			   << p.id << "; " <<p.x << "; " << p.y <<  "; "
-			   << p.theta << "; " <<p.weight << endl;
-	}
-	*/
-
 }
 
 /* Update Step
@@ -176,36 +154,13 @@ void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted,
 */
 
 void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
-		                           const std::vector<LandmarkObs> &observations,
-		                           const Map &map_landmarks) {
+		                               const std::vector<LandmarkObs> &observations,
+		                               const Map &map_landmarks) {
 
 	// clear weights vector
   weights.clear();
 	cout << "UpdateWeights Debug" << endl;
 
-	/*
-	 the first one is the dimension
-	 the second one is the kind of object that you will save on the structure
-	 the third one is the access, this is nice because if you overload the
-	 () operator with other kind of objects, you can search by them
-	*/
-  /*
-	KDTree::KDTree<2, LandmarkObs, tac> mapSearch;
-
-	for (auto & landmarks : map_landmarks.landmark_list){
-
-		LandmarkObs kd_landmark;
-		kd_landmark.id = landmarks.id_i;
-		kd_landmark.x  = landmarks.x_f ;
-		kd_landmark.y  = landmarks.y_f ;
-
-		// where current is a LandmarkObs instance
-		mapSearch.insert(kd_landmark);
-	}
-
-	// once you add all your landmarks, you optimise the current tree to search faster
-	mapSearch.optimise();
-	*/
 
 	for (auto & p : particles){
 
@@ -231,6 +186,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 
 			}
 		}
+
 
     ///* Transform the car's measurements to the map's coordinate system for one particle
     vector<LandmarkObs> transformed_observations;
@@ -272,12 +228,6 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 				}
 			}
 
-			// find_nearest will return an iterator that contains a tuple, the first element contains the element that you are looking for.
-      //LandmarkObs nearest = *mapSearch.find_nearest(obs).first;
-			//double test_distance = dist(predicted_obs.x, predicted_obs.y, nearest.x, nearest.y);
-			//cout << " test_distance: " << test_distance << endl;
-
-
 			///* Update weight for this observation
 			///* calculate normalization term
 			double gauss_norm = (1.0/(2.0 * M_PI * std_landmark[0] * std_landmark[1]));
@@ -296,80 +246,86 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 
 		weights.push_back(p.weight);
 
-		/*
-	    cout << " Particles element:"
-			     << p.id << "; " <<p.x << "; " << p.y <<  "; "
-			     << p.theta << "; "<<p.weight << endl;
-	    */
     }
 
 
-    /*
-    for int p = 0; p < observations.size(); p++{
+}
 
-		vector<int> associations;
-		vector<double> sense_x;
-		vector<double> sense_y;
+void ParticleFilter::updateWeights_optimized(double sensor_range, double std_landmark[],
+		                                         const std::vector<LandmarkObs_kd> &observations,
+		                                         const Map &map_landmarks) {
 
-		///* Transform the car's measurements to the map's coordinate system for one particle
-		vector<LandmarkObs> trans_observations;
-		LandmarkObs obs;
+	// clear weights vector
+  weights.clear();
 
-		for (int i = 0; i < observations.size(); i++){
+	for (auto & p : particles){
 
-			LandmarkObs trans_obs;
-			obs = observation[i];
+		KDTree::KDTree<2, LandmarkObs_kd, tac> mapSearch;
+    KDTree::KDTree<2, LandmarkObs_kd, tac> map_inrange;
+		// Restart this particle's weight
+		p.weight = 1;
 
-			///* Perform the space transformation from vehicle to map
-			trans_obs.x = particles[p].x +  obs.x*cos(particles[p].theta) - obs.y*sin(particles[p].theta);
-	        trans_obs.y = particles[p].y +  obs.x*sin(particles[p].theta) + obs.y*cos(particles[p].theta);
+		///* Gather all landmarks inside the sensor_range at one particle
+		for (auto & landmarks : map_landmarks.landmark_list){
+			map_inrange.insert(LandmarkObs_kd(landmarks.id_i, landmarks.x_f, landmarks.y_f));
+		}
 
-	        trans_observations.push_back(trans_obs);
-        }
+		vector<LandmarkObs_kd> landmarks_inrange;
+		LandmarkObs_kd ref;
+		ref.id = 0; ref.dim[0]  = p.x; ref.dim[1]  = p.y;
+    map_inrange.find_within_range(ref,sensor_range,back_insert_iterator<vector<LandmarkObs_kd> >(landmarks_inrange));
 
-        particles[p].weight = 1.0;
+		for (auto & landmark : landmarks_inrange){
+			mapSearch.insert(landmark);
+		}
 
-        for (int i = 0; i < trans_observations.size(); i++){
+		// once you add all your landmarks, you optimise the current tree to search faster
+		mapSearch.optimise();
 
-			double closet_dis = sensor_range;
-			int association   = 0;
+    ///* Transform the car's measurements to the map's coordinate system for one particle
+    vector<LandmarkObs_kd> transformed_observations;
+    transformed_observations.reserve(observations.size());
 
-			{
-				double landmark_x = map_landmarks.landmark_list[j].x_f;
-				double landmark_y = map_landmarks.landmark_list[j].y_f;
+		for (auto& obs: observations) {
 
-				double calc_dist = sqrt(pow(trans_observation[i].x-landmark_x,2.0) + pow(trans_observation[i].y-landmark_y,2.0));
-				if (calc_dist < closet_dis){
+			///* Transform each observation to the global coordinate system
+			LandmarkObs_kd transformed_obs;
+			transformed_obs.dim[0]  = p.x + cos(p.theta)* obs.dim[0]  -  sin(p.theta)* obs.dim[1];
+			transformed_obs.dim[1]  = p.y + sin(p.theta)* obs.dim[0]  +  cos(p.theta)* obs.dim[1];
+			transformed_obs.id = obs.id;
 
-				}
+			transformed_observations.push_back(transformed_obs);
 
-            }
-        }
+		}
 
-        if(association != 0){
+		///* For each transformed observation, find a closet landmark from the map.
+		for (auto& obs: transformed_observations) {
 
-			double meas_x = trans_observation[i].x;
-		    double meas_y = trans_observation[i].y;
+			// find_nearest will return an iterator that contains a tuple,
+			// the first element contains the element that you are looking for.
 
-		    double mu_x = map_landmarks.landmark_list[association].x;
-		    double mu_y = map_landmarks.landmark_list[association].y;
+      LandmarkObs_kd nearest = *mapSearch.find_nearest(obs).first;
 
-		    long double multipler = 1/(2*M_PI*std_landmark[0]*std_landmark[1])*exp(-pow(meas_x - mu_x,2)/(2*pow(std_landmark[0],2))- pow(meas_y - mu_y,2)/(2*pow(std_landmark[1],2)));
+			///* Update weight for this observation
+			///* calculate normalization term
+			double gauss_norm = (1.0/(2.0 * M_PI * std_landmark[0] * std_landmark[1]));
 
-		    if (multipler > 0){
+			///* calculate exponent
+			double exponent   =
+			((obs.dim[0] - nearest.dim[0])*(obs.dim[0] - nearest.dim[0]))/(2.0 * std_landmark[0] * std_landmark[0]) +
+			((obs.dim[1] - nearest.dim[1])*(obs.dim[1] - nearest.dim[1]))/(2.0 * std_landmark[1] * std_landmark[1]);
 
-				particles[p].weight *= multipler;
-		 	}
+		  ///* calculate weight using normalization terms and exponent
+		  double weight     = gauss_norm * exp(-exponent);
 
-		 	associations.push_back(association+1);
-		 	sense_x.push_back(trans_observations[i].x);
-		 	sense_y.push_back(trans_observations[i].y);
-	    }
+		  //* Particle's Final Weight Update
+		  p.weight         *= weight;
 
-	    particles[p] = SetAssociations(particles[p], associations, sense_x, sense_y);
-	    weights[p]   = particles[p].weight;
-	}
-	*/
+		}
+
+		weights.push_back(p.weight);
+
+    }
 
 }
 
@@ -396,38 +352,19 @@ void ParticleFilter::resample() {
         sample.id = i;
         resample_particles.push_back(sample);
 
-    }
+  }
 
-		/*
-    ///*DEBUG
-    cout << "Resample Debug: " << endl;
-    cout << " Before resample: " << endl;
-    for (auto & p : particles){
-		cout << " Particles element:"
-			 << p.id << "; " <<p.x << "; " << p.y <<  "; "
-			 << p.theta << "; " <<p.weight << endl;
-    }
-		*/
 
-    particles = resample_particles;
-
-		/*
-    ///*DEBUG
-    cout << " After resample: " << endl;
-    for (auto & p : particles){
-		cout << " Particles element:"
-			 << p.id << "; " <<p.x << "; " << p.y <<  "; "
-			 << p.theta << "; "<<p.weight << endl;
-    }
-		*/
+    //particles = resample_particles;
+		particles = std::move(resample_particles);
 
 
 }
 
 Particle ParticleFilter::SetAssociations(Particle& particle,
-                                          const std::vector<int>& associations,
-                                          const std::vector<double>& sense_x,
-                                          const std::vector<double>& sense_y){
+                                         const std::vector<int>& associations,
+                                         const std::vector<double>& sense_x,
+                                         const std::vector<double>& sense_y){
 
     //particle: the particle to assign each listed association, and association's (x,y) world coordinates mapping to
     // associations: The landmark id that goes along with each listed association
@@ -439,9 +376,9 @@ Particle ParticleFilter::SetAssociations(Particle& particle,
 	particle.sense_x.clear();
 	particle.sense_y.clear();
 
-    particle.associations= associations;
-    particle.sense_x = sense_x;
-    particle.sense_y = sense_y;
+  particle.associations= associations;
+  particle.sense_x = sense_x;
+  particle.sense_y = sense_y;
 }
 
 string ParticleFilter::getAssociations(Particle best) {
